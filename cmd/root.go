@@ -29,8 +29,10 @@ ngoperf profile --url=www.cloudflare.com:443 -p=1000 -w=100`,
 
 var profileCmd = &cobra.Command{
 	Use:   "profile",
-	Short: "HTTP GET to profiling the url",
-	Long:  `HTTP GET to profiling the url`,
+	Short: "Send mutilple HTTP GET requests to a url, and output summary about status, time and size",
+	Long: `Send mutilple HTTP GET requests to a url, and output summary about status, time and size
+The number of request and number of workers to send request could be set with -u and -v options, see below for details`,
+
 	Run: func(cmd *cobra.Command, args []string) {
 		profiler := profile.NewProfiler(numProfile, numWorker, verbose, http10)
 		profiler.RunProfile(reqURL)
@@ -40,8 +42,9 @@ var profileCmd = &cobra.Command{
 
 var getCmd = &cobra.Command{
 	Use:   "get",
-	Short: "Use HTTP GET to request the url and print the response",
-	Long:  `Use HTTP GET to request the url and print the response`,
+	Short: "Send HTTP GET to a url and print the response",
+	Long: `Send HTTP GET to a url and print the response
+The get command print HTTP response body only by default. To print request and response header, add the -v option.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		profiler := profile.NewGetter(http10, verbose)
 		profiler.RunProfile(reqURL)
@@ -60,7 +63,7 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&http10, "http10", "z", false, "use HTTP/1.0 to request instead of 1.1")
-	rootCmd.PersistentFlags().StringVarP(&reqURL, "url", "u", "", "request url")
+	rootCmd.PersistentFlags().StringVarP(&reqURL, "url", "u", "", "request url. ngoperf use https with port 443 to connect if protocol and port are not included")
 	rootCmd.MarkPersistentFlagRequired("url")
 	profileCmd.Flags().IntVarP(&numProfile, "np", "p", 100, "num of request")
 	profileCmd.Flags().IntVarP(&numWorker, "nw", "w", 20, "num of worker")
