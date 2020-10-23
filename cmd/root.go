@@ -1,18 +1,3 @@
-/*
-Copyright © 2020 Han-Yi Wang wanghy917@gmail.com
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cmd
 
 import (
@@ -38,18 +23,19 @@ var rootCmd = &cobra.Command{
 	Short: "ngoperf is a Go implemented CLI tool for profiling websites",
 	Long:  `ngoperf is a Go implemented CLI tool for profiling websites`,
 	Example: `ngoperf get -u https://hi.wanghy917.workers.dev/links
-ngoperf profile --url=stackoverflow.com -p=1000 -w=100`,
+ngoperf profile --url=stackoverflow.com -p=1000 -w=100
+ngoperf profile --url=www.cloudflare.com:443 -p=1000 -w=100`,
 }
 
 var profileCmd = &cobra.Command{
 	Use:   "profile",
-	Short: "Use HTTP GET to profiling the url",
-	Long:  `Use HTTP GET to profiling the url`,
+	Short: "HTTP GET to profiling the url",
+	Long:  `HTTP GET to profiling the url`,
 	Run: func(cmd *cobra.Command, args []string) {
 		profiler := profile.NewProfiler(numProfile, numWorker, verbose, http10)
 		profiler.RunProfile(reqURL)
 	},
-	Example: "ngoperf profile -u=stackoverflow.com -p=1000 -w=100",
+	Example: "ngoperf profile -u=www.google.com -p=2000 -w=400",
 }
 
 var getCmd = &cobra.Command{
@@ -60,7 +46,7 @@ var getCmd = &cobra.Command{
 		profiler := profile.NewGetter(http10, verbose)
 		profiler.RunProfile(reqURL)
 	},
-	Example: "ngoperf get -u=https://cloudflare-worker-practice.wanghy917.workers.dev/links",
+	Example: "ngoperf get -vz -u http://hi.wanghy917.workers.dev/links",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

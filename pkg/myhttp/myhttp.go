@@ -154,7 +154,7 @@ func (client *Client) newRequest(reqURL string) (*request, error) {
 	request.Header = fmt.Sprint(
 		"GET "+path+" HTTP/"+httpVersion+"\r\n",
 		"HOST: "+u.Hostname()+"\r\n",
-		"User-Agent: ngoperf/0.1.0 \r\n",
+		"User-Agent: ngoperf/v0.1 \r\n",
 		"Accept: */*\r\n",
 		"\r\n",
 	)

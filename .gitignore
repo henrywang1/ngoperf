@@ -3,3 +3,4 @@ vendor
 .vscode
 .git
 bin
+test.sh

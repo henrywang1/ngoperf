@@ -77,21 +77,11 @@ func (p *Profiler) RunProfile(url string) {
 		bar = pb.StartNew(p.numRequest)
 	}
 
-	var counter chan int
-	if bar != nil {
-		counter = make(chan int)
-		go func() {
-			for range counter {
-				bar.Increment()
-			}
-		}()
-	}
-
 	var wg sync.WaitGroup
 	for i := 0; i < p.numWorker; i++ {
 		wg.Add(1)
-		cfg := &workerCFG{http10: p.http10, verbose: p.verbose, useCounter: bar != nil}
-		go worker(&wg, counter, jobs, records, url, cfg)
+		cfg := &workerCFG{http10: p.http10, verbose: p.verbose, bar: bar}
+		go worker(&wg, jobs, records, url, cfg)
 	}
 
 	go func() {
@@ -102,9 +92,7 @@ func (p *Profiler) RunProfile(url string) {
 	}()
 	wg.Wait()
 	close(records)
-	if counter != nil {
-		close(counter)
-	}
+
 	if bar != nil {
 		bar.Finish()
 	}
@@ -120,12 +108,13 @@ func (p *Profiler) RunProfile(url string) {
 }
 
 type workerCFG struct {
-	http10     bool
-	verbose    bool
-	useCounter bool
+	http10  bool
+	verbose bool
+	// bar.Increment is atomic
+	bar *pb.ProgressBar
 }
 
-func worker(wg *sync.WaitGroup, counter chan int, jobs chan int, records chan *myhttp.Response, url string, cfg *workerCFG) {
+func worker(wg *sync.WaitGroup, jobs chan int, records chan *myhttp.Response, url string, cfg *workerCFG) {
 	defer wg.Done()
 	client := &myhttp.Client{Verbose: cfg.verbose, HTTP10: cfg.http10}
 	defer func() {
@@ -142,8 +131,8 @@ func worker(wg *sync.WaitGroup, counter chan int, jobs chan int, records chan *m
 			}
 			rc = &myhttp.Response{Status: err.Error()}
 		}
-		if cfg.useCounter {
-			counter <- 1
+		if cfg.bar != nil {
+			cfg.bar.Increment()
 		}
 		records <- rc
 	}
@@ -152,7 +141,11 @@ func worker(wg *sync.WaitGroup, counter chan int, jobs chan int, records chan *m
 func aggregateResult(p *Profiler, records chan *myhttp.Response, result *profileResult) {
 	for rec := range records {
 		if rec.StatusCode == 0 {
-			result.fatalError[rec.Status]++
+			errorLen := len(rec.Status)
+			if errorLen > 20 {
+				errorLen = 20
+			}
+			result.fatalError[rec.Status[:errorLen]]++
 			continue
 		}
 		result.status[rec.Status]++
