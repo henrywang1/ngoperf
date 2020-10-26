@@ -1,11 +1,13 @@
 
 # Ngoperf
+
 Ngoperf is a Go implemented CLI tool for [clodflare-2020-system-assignment](https://github.com/cloudflare-hiring/cloudflare-2020-systems-engineering-assignment).
 
-The result of the general assignment is put here: 
+The result of the general assignment is put here:
 [https://hi.wanghy917.workers.dev/](https://hi.wanghy917.workers.dev/)
 
 ## Overview
+
 Ngoperf can perform two tasks:
 - get: send one HTTP GET to a URL and print the response body
 - profile: send multiple HTTP GET to a URL, and output a summary about status, time, and size
@@ -13,14 +15,11 @@ Ngoperf can perform two tasks:
 An example output is shown below:
 ![](https://i.imgur.com/E9WZyfp.png)
 
-
-
 ## Compilie and Install Ngoperf
+
 Ngoperf is implemented by go, so you have to install go first. (1.15 is recommended)
 - [official](https://golang.org/dl/)
 - [ubuntu](https://github.com/golang/go/wiki/Ubuntu)
-
-
 
 After go is installed,  you can download and extract the zip and then build and install it with the below commands. In the future, it will support "go get".
 ```bash
@@ -34,18 +33,25 @@ make clean
 ```
 
 ## Using Ngoperf
+
 Ngoperf is built on [Cobra](https://github.com/spf13/cobra) to create the CLI interface.
 
 The CLI pattern is `ngoperf COMMAND --FLAG`, and the commands are list below.
+
 ### Help command
+
 ```bash
 ngoperf --help
 ngoperf help get
 ngoperf help profile
 ```
+
 ### Get command
+
 The get command print the HTTP response body of a given URL.
-#### flags:
+
+#### flags
+
 *   -u, --url
     *   request URL
 *   -v, --verbose
@@ -54,15 +60,20 @@ The get command print the HTTP response body of a given URL.
 *   -z, --http10
     *   *use HTTP/1.0 to request*
     *   *ngoperf use HTTP/1.1 by default*
-#### example:
+
+#### example
+
 ```
 ngoperf get --url=https://hi.wanghy917.workers.dev/links
 ```
 ![](https://i.imgur.com/vOgQo5v.png)
 
 ### Profile command
+
 The profile command sends mutilple HTTP GET requests to a url, and output summary about status, time and size. By default, ngoperf will use 5 workers to make 100 requests, but it can be changed by providing the flags.
-#### flags:
+
+#### flags
+
 *   -u, --url
     *   *request URL*
     *   *use HTTP/1.0 to request*
@@ -75,14 +86,17 @@ The profile command sends mutilple HTTP GET requests to a url, and output summar
     *  *the sleep time in second (default 0)*
     *  *ngoperf randomly sleep 0 to s seconds between the requests*
 
-#### example:
+#### example
+
 ```
 ngoperf profile --url=hi.wanghy917.workers.dev -p=200 -w=10
 ```
 ![](https://i.imgur.com/2TzlZZB.png)
 
 ## Experiment
-### Settings:
+
+### Settings
+
 * I profile 9 popular websites and [mine](https://hi.wanghy917.workers.dev/)
 * To prevent the requests are blocked due to high-frequency request, the flags are set to: 
     * Number of requests: **100**
@@ -94,9 +108,11 @@ ngoperf profile --url=hi.wanghy917.workers.dev -p=200 -w=10
     * The server does not run other tasks requiring CPU and network bandwidth
     * The network connection is stable
 
-### Why TTFB:
+### Why TTFB
+
 From the [Wiki page](https://en.wikipedia.org/wiki/Time_to_first_byte),
 Time to first byte (TTFB) is a measurement used to indicate a web server's responsiveness or other network resource. This time is made up of:
+
 * Socket connection time
 * Time taken to send the HTTP request
 * Time taken to get the first byte of the page
@@ -111,16 +127,22 @@ The reason is listed as follows:
 In reality, I think [user centric metrics](https://web.dev/user-centric-performance-metrics/) has more worth to be monitored.
 
 ## Result
+
 The two figures are the main results. Each figure is generated from 1000 requests, and 100 for each URL.
+
 ###  TTFB
+
 The below [violin plot](https://en.wikipedia.org/wiki/Violin_plot) shows the result of TTFB. The x-axis is the log of TTFB in ms, and the y-axis shows the request URLs.
 ![](https://i.imgur.com/JbBT8sa.png)
+
 ### Respons size
+
 The below [box plot](https://en.wikipedia.org/wiki/Box_plot) shows the result of the response size. The x-axis is the response size (header+body) in bytes, and the y-axis shows the request URLs.
 ![](https://i.imgur.com/AJgMcmR.png)
 
 
 ### Interesting Finding
+
 * All profiling have a 100% success rate
 * Most TTFB of the websites follow a normal distribution
 * Most TTFB of the websites are less than 200 ms (10^2.3)
@@ -138,8 +160,8 @@ The below [box plot](https://en.wikipedia.org/wiki/Box_plot) shows the result of
     * As can be seen from the below figure, users can see grey and white boxes, so they will not feel blocked by the website, and all contents with a large size will appear gradually.
 ![](https://i.imgur.com/ubVula9.png)
 
-
 ## What if we use an aggressive profing setting?
+
 As mentioned in the setting, I use 1 worker to send 100 requests for each website and sleep 0~5 seconds between each request. Here, I would like to share the results using 100 workers to send 1000 requests without sleep. As shown in the figure, the TTFB is much larger, and I think these websites have some mechanisms to prevent DDoS attacks or aggressive crawlers. 
 
 In addition, some websites will start to return non-success status code, and the success rate is no longer 100%. For example, Google returns [302](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/302), IMDb returns [503](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503), and stackoverflow (not shown in the figure) returns [429](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429).
@@ -147,6 +169,7 @@ In addition, some websites will start to return non-success status code, and the
 ![](https://i.imgur.com/eDevCi7.png)
 
 ## Implement Detail
+
 * I am more familiar with C++, but I think this is a good chance to learn Go, so I use Go (maybe RUST next time)
 * The assigment requires that we should not use a HTTP library
     * For the most part, I read others' code, online documents, and implement my HTTP library
