@@ -1,13 +1,17 @@
 package profile
 
 import (
+	"encoding/csv"
 	"fmt"
+	"log"
+	"math/rand"
 	"os"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"ngoperf/pkg/myhttp"
 
@@ -18,12 +22,12 @@ import (
 )
 
 type profileResult struct {
-	requestResponseTime []int64
-	responseSize        []int64
-	fatalError          map[string]int
-	status              map[string]int
-	statusCode          map[int]int
-	responseBody        string
+	ttfb         []int64
+	responseSize []int64
+	fatalError   map[string]int
+	status       map[string]int
+	statusCode   map[int]int
+	responseBody string
 }
 
 // Profiler is used to get of profile a url depending on its setting
@@ -33,17 +37,19 @@ type Profiler struct {
 	http10     bool
 	verbose    bool
 	isGetter   bool
+	sleepTime  int
 }
 
 // NewProfiler returns a new Profiler
 // Profiler request numRequest times with numWorker and prints profile summary
-func NewProfiler(numProfile int, numWorker int, verbose, http10 bool) (p *Profiler) {
+func NewProfiler(numProfile int, numWorker int, verbose, http10 bool, sleepTime int) (p *Profiler) {
 	p = &Profiler{
 		numRequest: numProfile,
 		numWorker:  numWorker,
 		http10:     http10,
 		verbose:    verbose,
 		isGetter:   false,
+		sleepTime:  sleepTime,
 	}
 	return p
 }
@@ -62,7 +68,7 @@ func NewGetter(http10 bool, verbose bool) (p *Profiler) {
 }
 
 // RunProfile profiles the url
-func (p *Profiler) RunProfile(url string) {
+func (p *Profiler) RunProfile(reqURL string) {
 	result := &profileResult{
 		status:     make(map[string]int),
 		fatalError: make(map[string]int),
@@ -80,8 +86,8 @@ func (p *Profiler) RunProfile(url string) {
 	var wg sync.WaitGroup
 	for i := 0; i < p.numWorker; i++ {
 		wg.Add(1)
-		cfg := &workerCFG{http10: p.http10, verbose: p.verbose, bar: bar}
-		go worker(&wg, jobs, records, url, cfg)
+		cfg := &workerCFG{http10: p.http10, verbose: p.verbose, bar: bar, sleepTime: p.sleepTime}
+		go worker(&wg, jobs, records, reqURL, cfg)
 	}
 
 	go func() {
@@ -100,7 +106,7 @@ func (p *Profiler) RunProfile(url string) {
 	if p.isGetter {
 		fmt.Println(result.responseBody)
 	} else {
-		printProfileResults(result)
+		printProfileResults(result, reqURL)
 	}
 	if len(result.fatalError) > 0 {
 		printErrors(result)
@@ -111,22 +117,23 @@ type workerCFG struct {
 	http10  bool
 	verbose bool
 	// bar.Increment is atomic
-	bar *pb.ProgressBar
+	bar       *pb.ProgressBar
+	sleepTime int
 }
 
-func worker(wg *sync.WaitGroup, jobs chan int, records chan *myhttp.Response, url string, cfg *workerCFG) {
+func worker(wg *sync.WaitGroup, jobs chan int, records chan *myhttp.Response, reqURL string, cfg *workerCFG) {
 	defer wg.Done()
+	var r *rand.Rand
+	if cfg.sleepTime > 0 {
+		r = rand.New(rand.NewSource(time.Now().Unix()))
+	}
+
 	client := &myhttp.Client{Verbose: cfg.verbose, HTTP10: cfg.http10}
-	defer func() {
-		if client.Conn != nil {
-			client.Conn.Close()
-		}
-	}()
 	for range jobs {
-		rc, err := client.GET(url)
+		rc, err := client.GET(reqURL)
 		if err != nil {
 			if cfg.verbose {
-				errStr := fmt.Sprintf("Send GET rerror %s: %s", url, err.Error())
+				errStr := fmt.Sprintf("GET rerror %s: %s", reqURL, err.Error())
 				fmt.Println(errStr)
 			}
 			rc = &myhttp.Response{Status: err.Error()}
@@ -135,6 +142,12 @@ func worker(wg *sync.WaitGroup, jobs chan int, records chan *myhttp.Response, ur
 			cfg.bar.Increment()
 		}
 		records <- rc
+		if r != nil {
+			time.Sleep(time.Millisecond * time.Duration(cfg.sleepTime*1000))
+		}
+		if client.Conn != nil {
+			client.Conn.Close()
+		}
 	}
 }
 
@@ -153,13 +166,13 @@ func aggregateResult(p *Profiler, records chan *myhttp.Response, result *profile
 			result.responseBody = rec.ResponseBody
 			continue
 		}
-		result.requestResponseTime = append(result.requestResponseTime, rec.ResponseTime)
+		result.ttfb = append(result.ttfb, rec.TTFB)
 		result.responseSize = append(result.responseSize, rec.ResponseSize)
 		result.statusCode[rec.StatusCode]++
 	}
 }
 
-func printProfileResults(result *profileResult) {
+func printProfileResults(result *profileResult, url string) {
 	n := len(result.responseSize)
 	if n <= 0 {
 		fmt.Println("No Result.")
@@ -168,8 +181,33 @@ func printProfileResults(result *profileResult) {
 	fmt.Println()
 	printSuccessRate(n, &result.statusCode)
 	printStatusSummary(result.status)
-	printSpeedSummary(result.requestResponseTime)
+	printTTFBSummary(result.ttfb)
 	printSizeSummary(result.responseSize)
+
+	// for draw figure
+	// writeCSV(result.ttfb, result.responseSize, url)
+}
+
+func writeCSV(ttfb []int64, size []int64, url string) {
+	file, err := os.OpenFile("result.csv", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	defer file.Close()
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	if len(ttfb) != len(size) {
+		log.Fatal("length of ttfb and size should be the same")
+	}
+	for i := 0; i < len(ttfb); i++ {
+		err = writer.Write([]string{url, strconv.FormatInt(ttfb[i], 10), strconv.FormatInt(size[i], 10)})
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+	}
 }
 
 func printSuccessRate(n int, statusCode *map[int]int) {
@@ -197,15 +235,15 @@ func printStatusSummary(status map[string]int) {
 		}
 	}
 	table.SetHeaderColor(
-		tablewriter.Colors{tablewriter.Bold, tablewriter.BgBlackColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.BgBlackColor},
+		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
 	)
 	table.AppendBulk(summary)
 	table.Render()
 }
 
-func printSpeedSummary(intervals []int64) {
-	fmt.Println("\nThe Summary of Response Time (ms):")
+func printTTFBSummary(intervals []int64) {
+	fmt.Println("\nThe Summary of Time to First Byte (ms):")
 	sort.Slice(intervals, func(i, j int) bool { return intervals[i] < intervals[j] })
 	n := len(intervals)
 	var sum int64 = 0
@@ -224,15 +262,15 @@ func printSpeedSummary(intervals []int64) {
 	}
 	table.AppendBulk(summary)
 	table.SetHeaderColor(
-		tablewriter.Colors{tablewriter.Bold, tablewriter.BgBlackColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.BgBlackColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.BgBlackColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.BgBlackColor})
+		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold})
 	table.Render()
 }
 
 func printSizeSummary(responseSize []int64) {
-	fmt.Println("\nThe Smallest and Largest Responses (bytes):")
+	fmt.Println("\nThe Responses Size (bytes):")
 	sort.Slice(responseSize, func(i, j int) bool { return responseSize[i] < responseSize[j] })
 	n := len(responseSize)
 	smallest := prettyInt64(responseSize[0])
@@ -244,8 +282,8 @@ func printSizeSummary(responseSize []int64) {
 		{smallest, largest},
 	}
 	table.SetHeaderColor(
-		tablewriter.Colors{tablewriter.Bold, tablewriter.BgBlackColor},
-		tablewriter.Colors{tablewriter.Bold, tablewriter.BgBlackColor},
+		tablewriter.Colors{tablewriter.Bold},
+		tablewriter.Colors{tablewriter.Bold},
 	)
 	table.AppendBulk(summary)
 	table.Render()

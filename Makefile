@@ -1,6 +1,6 @@
 -include .envco
-PROJECTNAME := $(shell basename "$(PWD)")
-VERSION := 0.1.0
+PROJECTNAME := ngoperf
+VERSION := 0.2.0
 
 install:
 	@go mod tidy && go mod vendor
@@ -16,4 +16,6 @@ clean:
 	@go clean
 	@go clean -modcache
 	@go clean -i
+	@rm -rf vendor
+	@rm ./bin/"$(PROJECTNAME)"
 	@echo "  >  done"

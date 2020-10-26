@@ -27,7 +27,9 @@ type Response struct {
 	ResponseBody string
 	StatusCode   int
 	ResponseSize int64
-	ResponseTime int64
+	TTFB         int64
+	tStart       time.Time
+	tFirstByte   time.Time
 }
 
 // Client keep the connection and request website
@@ -80,44 +82,35 @@ func (cc *connWithCounter) Read(p []byte) (int, error) {
 // GET request the url with HTTP GET
 func (client *Client) GET(url string) (*Response, error) {
 	var err error
-	var rc *Response
 	request, err := client.newRequest(url)
 	if client.Verbose {
 		fmt.Print(request.Header)
 	}
-	finalize := func() (*Response, error) {
-		if client.Conn != nil && client.HTTP10 {
-			client.Conn.Close()
-			client.Conn = nil
-		}
+	if err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return finalize()
-	}
-	if client.Conn == nil {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		client.Conn, err = connect(ctx, request)
-		if err != nil {
-			return finalize()
-		}
-	}
 
-	tRequestTime := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	resp := &Response{tStart: time.Now()}
+	client.Conn, err = connect(ctx, request)
+
+	if err != nil {
+		return nil, err
+	}
 	_, err = client.Conn.Write([]byte(request.Header))
 	if err != nil {
-		return finalize()
+		return nil, err
 	}
 
-	rc, err = client.ReadResponse()
+	err = client.ReadResponse(resp)
 	if err != nil {
-		return finalize()
+		return nil, err
 	}
-	_, err = finalize()
-	rc.ResponseTime = time.Since(tRequestTime).Milliseconds()
+	resp.TTFB = resp.tFirstByte.Sub(resp.tStart).Milliseconds()
 
-	return rc, err
+	return resp, err
 }
 
 func (client *Client) newRequest(reqURL string) (*request, error) {
@@ -151,10 +144,11 @@ func (client *Client) newRequest(reqURL string) (*request, error) {
 	if !strings.HasSuffix(path, "/") && !strings.ContainsAny(path, ".") {
 		path = path + "/"
 	}
+	agentName := `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36`
 	request.Header = fmt.Sprint(
 		"GET "+path+" HTTP/"+httpVersion+"\r\n",
 		"HOST: "+u.Hostname()+"\r\n",
-		"User-Agent: ngoperf/v0.1 \r\n",
+		"User-Agent: "+agentName+"\r\n",
 		"Accept: */*\r\n",
 		"\r\n",
 	)
@@ -208,38 +202,33 @@ func (handler *responseHandler) readResponseBody(r *Response) ([]byte, error) {
 }
 
 // ReadResponse read client.conn to Response
-func (client *Client) ReadResponse() (r *Response, err error) {
+func (client *Client) ReadResponse(r *Response) (err error) {
 	cc := &connWithCounter{reader: client.Conn}
 	handler := &responseHandler{br: bufio.NewReader(cc), verbose: client.Verbose}
-	r = &Response{}
 	if err = handler.readStatusLine(r); err != nil {
-		return nil, err
+		return err
 	}
 
 	if err = handler.readHeader(r); err != nil {
-		return nil, err
+		return err
 	}
 
 	var responseBody []byte
 	responseBody, err = handler.readResponseBody(r)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// connection: close in Response header
-	if handler.shouldCloseConn {
-		client.Conn.Close()
-		client.Conn = nil
-	}
 	r.ResponseBody = string(responseBody)
 	r.ResponseSize = cc.totalBytes
 
-	return r, nil
+	return nil
 
 }
 
 func (handler *responseHandler) readStatusLine(r *Response) error {
 	line, err := readLine(handler.br)
+	r.tFirstByte = time.Now()
 	if err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF

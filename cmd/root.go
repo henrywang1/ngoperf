@@ -15,6 +15,7 @@ var (
 	numWorker  int
 	http10     bool
 	verbose    bool
+	sleepTime  int
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -34,7 +35,7 @@ var profileCmd = &cobra.Command{
 The number of request and number of workers to send request could be set with -u and -v options, see below for details`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-		profiler := profile.NewProfiler(numProfile, numWorker, verbose, http10)
+		profiler := profile.NewProfiler(numProfile, numWorker, verbose, http10, sleepTime)
 		profiler.RunProfile(reqURL)
 	},
 	Example: "ngoperf profile -u=www.google.com -p=2000 -w=400",
@@ -62,13 +63,18 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().BoolVarP(&http10, "http10", "z", false, "use HTTP/1.0 to request instead of 1.1")
-	rootCmd.PersistentFlags().StringVarP(&reqURL, "url", "u", "", "request url. ngoperf use https with port 443 to connect if protocol and port are not included")
-	rootCmd.MarkPersistentFlagRequired("url")
+	profileCmd.Flags().BoolVarP(&http10, "http10", "z", false, "use HTTP/1.0 to request\nnhoprtg use HTTP/1.1 by default")
+	profileCmd.Flags().StringVarP(&reqURL, "url", "u", "", "request url\nngoperf use https with port 443 to connect if protocol and port are not included")
+	profileCmd.MarkFlagRequired("url")
 	profileCmd.Flags().IntVarP(&numProfile, "np", "p", 100, "num of request")
-	profileCmd.Flags().IntVarP(&numWorker, "nw", "w", 20, "num of worker")
+	profileCmd.Flags().IntVarP(&numWorker, "nw", "w", 5, "num of worker")
+	profileCmd.Flags().IntVarP(&sleepTime, "sleep", "s", 0, "sleep time between requests\nngoperf randomly sleep 0 to s seconds between the requests")
 	rootCmd.AddCommand(profileCmd)
 
+	getCmd.Flags().BoolVarP(&http10, "http10", "z", false, "use HTTP/1.0 to request\nnhoprtg use HTTP/1.1 by default")
 	getCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print request and response header")
+	getCmd.Flags().StringVarP(&reqURL, "url", "u", "", "request url\nngoperf use https with port 443 to connect if protocol and port are not included")
+	getCmd.MarkFlagRequired("url")
+
 	rootCmd.AddCommand(getCmd)
 }
