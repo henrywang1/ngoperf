@@ -3,8 +3,6 @@
 
 Ngoperf is a Go implemented CLI tool for [clodflare-2020-system-assignment](https://github.com/cloudflare-hiring/cloudflare-2020-systems-engineering-assignment).
 
-The result of the general assignment is put here:
-[https://hi.wanghy917.workers.dev/](https://hi.wanghy917.workers.dev/)
 
 ## Overview
 
